@@ -1,0 +1,23 @@
+CREATE OR REPLACE FUNCTION merge_jsonb_objects(VARIADIC objs jsonb[])
+RETURNS jsonb AS $$
+DECLARE
+  result jsonb;
+  i integer := 1;
+BEGIN
+  IF array_length(objs, 1) = 1 THEN
+    -- Only one object, return it as is
+    RETURN objs[1];
+  END IF;
+
+  result := objs[1];
+
+  WHILE i < array_length(objs, 1) LOOP
+    -- Recursively merge current object with the previous result
+    result := result || objs[i + 1];
+    i := i + 1;
+  END LOOP;
+
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
