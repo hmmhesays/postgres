@@ -21,3 +21,183 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+###################################################################################################################
+-- FUNCTION: public.merge_jsonb_objects(jsonb, jsonb[])
+
+-- DROP FUNCTION IF EXISTS public.merge_jsonb_objects(jsonb, jsonb[]);
+
+CREATE OR REPLACE FUNCTION public.merge_jsonb_objects(
+	options jsonb,
+	VARIADIC objs jsonb[])
+    RETURNS jsonb
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+  result jsonb;
+  key text;
+  omit jsonb := COALESCE(options->'omit', '[]'::JSONB);
+  merge_empty bool := COALESCE((options->>'merge_empty')::BOOL, true);
+  reverse_merge bool := COALESCE((options->>'reverse_merge')::BOOL, false);
+  obj1 jsonb;
+  obj2 jsonb;
+  i int := 1;
+  j int;
+  param_length int := array_length(objs, 1);
+BEGIN
+
+raise notice 'array_length %', array_length(objs, 1);
+
+IF reverse_merge THEN
+	i = param_length;
+END IF;
+
+WHILE i <= param_length LOOP
+
+  obj1 = objs[i];
+  obj2 = objs[i + 1];
+  
+  raise notice 'notice message %, %', obj1, obj2;
+  
+  IF obj2 IS NULL THEN
+  	RETURN obj1;
+  END IF;
+
+  IF jsonb_typeof(obj1) <> 'object' OR jsonb_typeof(obj2) <> 'object' THEN
+    -- If either object is not an object, return the second object
+    RETURN obj2;
+  END IF;
+  
+  result = obj1;
+
+  -- Loop over keys in obj2
+  
+FOR key IN SELECT jsonb_object_keys(obj2) LOOP
+  
+  	IF key IN (SELECT jsonb_array_elements_text(omit)) THEN
+		CONTINUE;
+	END IF;
+  
+    IF NOT (key = ANY (SELECT jsonb_object_keys(result))) THEN
+      -- If the key does not exist in result, simply add it with its value
+      result := jsonb_set(result, ARRAY[key], obj2 -> key);
+    ELSE
+      -- If the key exists in both objects, recursively merge the values
+	  IF merge_empty = false AND (obj2->key IS NULL OR LENGTH(obj2->>key) = 0) THEN
+	  	CONTINUE;
+	  END IF;
+	  
+      result := jsonb_set(result, ARRAY[key],
+                          merge_jsonb_objects(options, result -> key, obj2 -> key));
+    END IF;
+  
+END LOOP;
+
+  raise notice 'result: %', result;
+  
+  
+  
+  IF reverse_merge THEN
+  	objs[i - 1] = result;
+  	i = i - 1;
+  ELSE
+  	objs[i + 1] = result;
+  	i = i + 1;
+  END IF;
+  
+END LOOP;
+
+  RETURN result;
+END;
+$BODY$;
+
+ALTER FUNCTION public.merge_jsonb_objects(jsonb, jsonb[])
+    OWNER TO postgres;
+
+###############################################################################################
+
+
+-- FUNCTION: public.merge_jsonb_objects(jsonb, jsonb[])
+
+-- DROP FUNCTION IF EXISTS public.merge_jsonb_objects(jsonb, jsonb[]);
+
+CREATE OR REPLACE FUNCTION public.merge_jsonb_objects(
+	options jsonb,
+	VARIADIC objs jsonb[])
+    RETURNS jsonb
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+  result jsonb;
+  key text;
+  omit jsonb := COALESCE(options->'omit', '[]'::JSONB);
+  merge_empty bool := COALESCE((options->>'merge_empty')::BOOL, true);
+  
+  obj1 jsonb;
+  obj2 jsonb;
+ 
+BEGIN
+
+FOR i IN SELECT jsonb_object_keys(objs)
+
+  obj1 = objs[i];
+  obj2 = objs[i + 1];
+  
+  raise notice 'notice message %, %', obj1, obj2;
+  
+  IF obj2 IS NULL THEN
+  	RETURN obj1;
+  END IF;
+
+  IF jsonb_typeof(obj1) <> 'object' OR jsonb_typeof(obj2) <> 'object' THEN
+    -- If either object is not an object, return the second object
+    RETURN obj2;
+  END IF;
+  
+  result = obj1;
+
+  -- Loop over keys in obj2
+  
+FOR key IN SELECT jsonb_object_keys(obj2) LOOP
+  
+  IF key IN (SELECT jsonb_array_elements_text(omit)) THEN
+		CONTINUE;
+	END IF;
+  
+    IF NOT (key = ANY (SELECT jsonb_object_keys(result))) THEN
+      -- If the key does not exist in result, simply add it with its value
+      result := jsonb_set(result, ARRAY[key], obj2 -> key);
+    ELSE
+      -- If the key exists in both objects, recursively merge the values
+	  IF merge_empty = false AND (obj2->key IS NULL OR LENGTH(obj2->>key) = 0) THEN
+	  	CONTINUE;
+	  END IF;
+	  
+      result := jsonb_set(result, ARRAY[key],
+                          merge_jsonb_objects(options, result -> key, obj2 -> key));
+    END IF;
+  
+END LOOP;
+
+  raise notice 'result: %', result;
+ 
+ i = i + 1;
+ 
+END LOOP;
+
+  RETURN result;
+END;
+$BODY$;
+
+ALTER FUNCTION public.merge_jsonb_objects(jsonb, jsonb[])
+    OWNER TO postgres;
+    
+##########################################################################################################################################################
+
+
+
+
+
